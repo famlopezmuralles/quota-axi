@@ -619,6 +619,42 @@ describe("quota semantics", () => {
     });
   });
 
+  it("keeps valid Muse Code bounds while marking an unparsed meter partial", () => {
+    const muse = provider("muse", [window("weekly", "weekly", 93)]);
+    muse.state.untrustedWindowIds = ["five_hour"];
+
+    const result = withQuotaSemantics(muse, GENERATED_AT);
+
+    expect(result.quotaSemantics).toEqual({
+      status: "partial",
+      description:
+        "Muse Code's five-hour and weekly subscription windows jointly bound every model, but unfamiliar windows prevent a definitive effective percentage.",
+      effectiveAvailability: [
+        {
+          scope: "all_models",
+          status: "unknown",
+          boundedBy: ["weekly"],
+          pace: {
+            status: "unknown",
+            unknownWindowIds: ["weekly"],
+          },
+          runway: {
+            status: "unknown",
+            unmeasurableWindowIds: ["weekly", "five_hour"],
+          },
+          selection: {
+            status: "unknown",
+            unmeasurableWindowIds: ["weekly", "five_hour"],
+          },
+        },
+      ],
+      unresolvedWindowIds: ["five_hour"],
+    });
+    expect(
+      result.quotaSemantics?.effectiveAvailability[0]?.effectivePercentRemaining,
+    ).toBeUndefined();
+  });
+
   it("keeps valid Kimi bounds while marking unparsed limits partial", () => {
     const kimi = provider("kimi", [window("weekly", "weekly", 59)]);
     kimi.state.untrustedWindowIds = ["limit:2"];

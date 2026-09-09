@@ -127,7 +127,11 @@ function semanticsFor(
     case "alibaba":
       return alibabaSemantics(provider.windows, generatedAt);
     case "muse":
-      return museSemantics(provider.windows, generatedAt);
+      return museSemantics(
+        provider.windows,
+        provider.state.untrustedWindowIds ?? [],
+        generatedAt,
+      );
     case "opencode-go":
       return unknownSemantics(
         provider.windows,
@@ -456,6 +460,7 @@ function zaiSemantics(
  */
 function museSemantics(
   windows: QuotaWindow[],
+  untrustedWindowIds: string[],
   generatedAt: string,
 ): QuotaSemantics {
   const recognized = windows.filter(
@@ -464,14 +469,17 @@ function museSemantics(
   const unresolved = windows.filter(
     ({ id }) => id !== "five_hour" && id !== "weekly",
   );
-  if (unresolved.length > 0) {
+  const unresolvedWindowIds = [
+    ...new Set([...unresolved.map(({ id }) => id), ...untrustedWindowIds]),
+  ];
+  if (unresolvedWindowIds.length > 0) {
     const effectiveAvailability: EffectiveAvailability[] =
       recognized.length > 0
         ? [
             unresolvedAvailability(
               "all_models",
               recognized,
-              unresolved.map(({ id }) => id),
+              unresolvedWindowIds,
             ),
           ]
         : [];
@@ -480,7 +488,7 @@ function museSemantics(
       description:
         "Muse Code's five-hour and weekly subscription windows jointly bound every model, but unfamiliar windows prevent a definitive effective percentage.",
       effectiveAvailability,
-      unresolvedWindowIds: unresolved.map(({ id }) => id),
+      unresolvedWindowIds,
     };
   }
   const effectiveAvailability =

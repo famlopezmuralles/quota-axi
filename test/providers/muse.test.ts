@@ -225,6 +225,7 @@ describe("Muse subscription stamp request", () => {
       },
       attempts: [{ source: "muse:auth.json", status: "success" }],
     });
+    expect(report.state.untrustedWindowIds).toBeUndefined();
     expect(report.windows).toEqual([
       {
         id: "five_hour",
@@ -375,6 +376,83 @@ describe("Muse subscription stamp request", () => {
     expect(report.windows).toHaveLength(1);
   });
 
+  it("names an unparseable present meter as untrusted instead of a complete bound set", async () => {
+    const adapter = testAdapter({
+      fetch: vi.fn(async () =>
+        jsonResponse({
+          ...STAMP,
+          subs_usage: {
+            window: { used_percent: "lots" },
+            weekly: { used_percent: 7, resets_at: 1789344000 },
+          },
+        }),
+      ) as unknown as typeof fetch,
+    });
+
+    const report = await adapter.fetchQuota(OPTIONS);
+
+    expect(report.state).toMatchObject({
+      status: "fresh",
+      stale: false,
+      untrustedWindowIds: ["five_hour"],
+    });
+    expect(report.windows).toEqual([
+      {
+        id: "weekly",
+        label: "week",
+        kind: "weekly",
+        percentUsed: 7,
+        percentRemaining: 93,
+        windowSeconds: 604_800,
+        resetsAt: "2026-09-14T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("preserves untrusted window ids on a stale snapshot", async () => {
+    const cached = {
+      provider: "muse",
+      label: "Muse Code",
+      source: "api",
+      windows: [
+        {
+          id: "weekly",
+          label: "week",
+          kind: "weekly",
+          percentUsed: 7,
+          percentRemaining: 93,
+          windowSeconds: 604_800,
+          resetsAt: "2026-09-14T00:00:00.000Z",
+        },
+      ],
+      state: {
+        status: "fresh",
+        stale: false,
+        refreshedAt: new Date(NOW).toISOString(),
+        untrustedWindowIds: ["five_hour"],
+      },
+    } as never;
+    const adapter = testAdapter({
+      fetch: vi.fn(
+        async () =>
+          new Response(null, {
+            status: 429,
+            headers: { "retry-after": "120" },
+          }),
+      ) as unknown as typeof fetch,
+      readCachedProvider: (() => cached) as never,
+    });
+
+    const report = await adapter.fetchQuota(OPTIONS);
+
+    expect(report.state).toMatchObject({
+      status: "stale",
+      stale: true,
+      untrustedWindowIds: ["five_hour"],
+    });
+    expect(report.windows).toEqual(cached.windows);
+  });
+
   it("fails closed without a cache on a server error", async () => {
     const adapter = testAdapter({
       fetch: vi.fn(
@@ -420,10 +498,21 @@ describe("normalizeMusePayload", () => {
         subs_tier_name: "Muse Code Everyday",
         subs_usage: {
           window: { used_percent: "lots", resets_at: "soon" },
+          weekly: { used_percent: 7, resets_at: 1789344000 },
         },
       }),
     ).toEqual({
-      windows: [],
+      windows: [
+        {
+          id: "weekly",
+          label: "week",
+          kind: "weekly",
+          percentUsed: 7,
+          percentRemaining: 93,
+          windowSeconds: 604_800,
+          resetsAt: "2026-09-14T00:00:00.000Z",
+        },
+      ],
       plan: "Muse Code Everyday",
       email: undefined,
       diagnostics: [{ code: "window_invalid" }],

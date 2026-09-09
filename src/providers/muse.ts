@@ -255,6 +255,9 @@ async function acquireMuseQuota(
       dependencies.now,
     );
     const normalized = normalizeMusePayload(payload);
+    const untrustedWindowIds = normalized.diagnostics.map((diagnostic) =>
+      diagnostic.code === "window_invalid" ? "five_hour" : "weekly",
+    );
     const refreshedAt = new Date(dependencies.now()).toISOString();
     attempts[attempts.length - 1] = {
       source: MUSE_AUTH_SOURCE,
@@ -271,6 +274,7 @@ async function acquireMuseQuota(
         status: "fresh",
         stale: false,
         refreshedAt,
+        ...(untrustedWindowIds.length > 0 ? { untrustedWindowIds } : {}),
         sourcesTried: attempts.map(({ source }) => source),
       },
       attempts,
@@ -410,6 +414,9 @@ function staleMuseReport(
       refreshedAt: cached.state.refreshedAt,
       error,
       ...(retryAfter ? { retryAfter } : {}),
+      ...(cached.state.untrustedWindowIds
+        ? { untrustedWindowIds: cached.state.untrustedWindowIds }
+        : {}),
       sourcesTried: [...attempts.map(({ source }) => source), "cache"],
     },
     attempts,
