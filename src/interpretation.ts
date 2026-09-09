@@ -126,6 +126,12 @@ function semanticsFor(
       );
     case "alibaba":
       return alibabaSemantics(provider.windows, generatedAt);
+    case "muse":
+      return museSemantics(
+        provider.windows,
+        provider.state.untrustedWindowIds ?? [],
+        generatedAt,
+      );
     case "opencode-go":
       return unknownSemantics(
         provider.windows,
@@ -441,6 +447,57 @@ function zaiSemantics(
   return knownSemantics(
     effectiveAvailability,
     "Z.AI's five-hour and weekly token windows jointly bound model usage, so effective remaining is the minimum across the named windows. The monthly tool window is an independent resource.",
+  );
+}
+
+/**
+ * Muse Code's rolling five-hour window and weekly window are the two meters on
+ * the vendor's subscription stamp, and both draw on the same subscription
+ * allowance, so quota-axi treats them as jointly bounding every model. That is
+ * the conservative reading: the effective remaining is the minimum across
+ * them, which never overstates headroom even if a window later turns out to be
+ * independent.
+ */
+function museSemantics(
+  windows: QuotaWindow[],
+  untrustedWindowIds: string[],
+  generatedAt: string,
+): QuotaSemantics {
+  const recognized = windows.filter(
+    ({ id }) => id === "five_hour" || id === "weekly",
+  );
+  const unresolved = windows.filter(
+    ({ id }) => id !== "five_hour" && id !== "weekly",
+  );
+  const unresolvedWindowIds = [
+    ...new Set([...unresolved.map(({ id }) => id), ...untrustedWindowIds]),
+  ];
+  if (unresolvedWindowIds.length > 0) {
+    const effectiveAvailability: EffectiveAvailability[] =
+      recognized.length > 0
+        ? [
+            unresolvedAvailability(
+              "all_models",
+              recognized,
+              unresolvedWindowIds,
+            ),
+          ]
+        : [];
+    return {
+      status: "partial",
+      description:
+        "Muse Code's five-hour and weekly subscription windows jointly bound every model, but unfamiliar windows prevent a definitive effective percentage.",
+      effectiveAvailability,
+      unresolvedWindowIds,
+    };
+  }
+  const effectiveAvailability =
+    recognized.length > 0
+      ? [availability("all_models", recognized, generatedAt)]
+      : [];
+  return knownSemantics(
+    effectiveAvailability,
+    "Muse Code's five-hour and weekly subscription windows jointly bound every model, so effective remaining is the minimum across the named windows.",
   );
 }
 

@@ -24,6 +24,7 @@ const originalZaiProvider = PROVIDERS.zai;
 const originalAgyProvider = PROVIDERS.agy;
 const originalAlibabaProvider = PROVIDERS.alibaba;
 const originalOpenCodeGoProvider = PROVIDERS["opencode-go"];
+const originalMuseProvider = PROVIDERS.muse;
 const originalXdgCacheHome = process.env.XDG_CACHE_HOME;
 let tempDir: string | undefined;
 
@@ -38,6 +39,7 @@ afterEach(() => {
   PROVIDERS.agy = originalAgyProvider;
   PROVIDERS.alibaba = originalAlibabaProvider;
   PROVIDERS["opencode-go"] = originalOpenCodeGoProvider;
+  PROVIDERS.muse = originalMuseProvider;
   if (originalXdgCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
   else process.env.XDG_CACHE_HOME = originalXdgCacheHome;
   if (tempDir) rmSync(tempDir, { recursive: true, force: true });
@@ -59,6 +61,7 @@ describe("CLI flag parsing", () => {
       "agy",
       "alibaba",
       "opencode-go",
+      "muse",
     ]);
   });
 
@@ -96,6 +99,7 @@ describe("CLI flag parsing", () => {
           "agy",
           "alibaba",
           "opencode-go",
+          "muse",
         ],
         json: true,
         full: true,
@@ -793,6 +797,7 @@ describe("default TOON decision blocks", () => {
     PROVIDERS.agy = providerWithQuota(unavailableAgyQuota());
     PROVIDERS.alibaba = providerWithQuota(freshAlibabaQuota());
     PROVIDERS["opencode-go"] = providerWithQuota(freshOpenCodeGoQuota());
+    PROVIDERS.muse = providerWithQuota(freshMuseQuota());
 
     const output = await capture([]);
     const named = new Set([
@@ -809,6 +814,7 @@ describe("default TOON decision blocks", () => {
       "cursor",
       "grok",
       "kimi",
+      "muse",
       "opencode-go",
       "zai",
     ]);
@@ -1726,6 +1732,43 @@ function freshOpenCodeGoQuota(): ProviderQuota {
       refreshedAt: "2026-07-06T18:10:00Z",
       sourcesTried: ["opencode:auth.json"],
     },
+  };
+}
+
+function freshMuseQuota(): ProviderQuota {
+  return {
+    provider: "muse",
+    label: "Muse Code",
+    source: "api",
+    plan: "Muse Code Everyday",
+    account: { email: "synthetic@example.com" },
+    windows: [
+      {
+        id: "five_hour",
+        label: "5h",
+        kind: "session",
+        percentUsed: 6,
+        percentRemaining: 94,
+        windowSeconds: 18_000,
+        resetsAt: "2026-09-09T09:32:01.000Z",
+      },
+      {
+        id: "weekly",
+        label: "week",
+        kind: "weekly",
+        percentUsed: 7,
+        percentRemaining: 93,
+        windowSeconds: 604_800,
+        resetsAt: "2026-09-14T00:00:00.000Z",
+      },
+    ],
+    state: {
+      status: "fresh",
+      stale: false,
+      refreshedAt: "2026-09-08T12:00:00Z",
+      sourcesTried: ["muse:auth.json"],
+    },
+    attempts: [{ source: "muse:auth.json", status: "success" }],
   };
 }
 
