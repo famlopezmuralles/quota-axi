@@ -577,6 +577,48 @@ describe("quota semantics", () => {
     ]);
   });
 
+  it("computes all-model Muse Code headroom from both subscription windows", () => {
+    const result = withQuotaSemantics(
+      provider("muse", [
+        window("weekly", "weekly", 59),
+        window("five_hour", "session", 50),
+      ]),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics?.effectiveAvailability).toEqual([
+      expect.objectContaining({
+        scope: "all_models",
+        status: "known",
+        effectivePercentRemaining: 50,
+        boundedBy: ["weekly", "five_hour"],
+        limitingWindowIds: ["five_hour"],
+      }),
+    ]);
+  });
+
+  it("marks unfamiliar Muse Code windows unresolved instead of folding them in", () => {
+    const result = withQuotaSemantics(
+      provider("muse", [
+        window("weekly", "weekly", 59),
+        window("token_bonus", "unknown", 100),
+      ]),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics).toMatchObject({
+      status: "partial",
+      unresolvedWindowIds: ["token_bonus"],
+      effectiveAvailability: [
+        expect.objectContaining({
+          scope: "all_models",
+          status: "unknown",
+          boundedBy: ["weekly"],
+        }),
+      ],
+    });
+  });
+
   it("keeps valid Kimi bounds while marking unparsed limits partial", () => {
     const kimi = provider("kimi", [window("weekly", "weekly", 59)]);
     kimi.state.untrustedWindowIds = ["limit:2"];

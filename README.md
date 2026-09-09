@@ -209,6 +209,7 @@ auth[15]{provider,source,path,status,error}:
   agy,loopback,none,available,none
   alibaba,bl-cli,none,available,none
   opencode-go,opencode:auth.json,~/.local/share/opencode/auth.json,available,none
+  muse,muse:auth.json,~/.config/muse/auth.json,available,none
 help[1]:
   Run `quota-axi --allow-keychain-prompt auth` to permit macOS Keychain access
 ```
@@ -301,20 +302,20 @@ It is generated from `src/skill.ts`; update it with `pnpm run build:skill` and v
 
 ### Flags
 
-| Flag                                                                           | Description                                                        |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `--provider claude,codex,cursor,copilot,grok,kimi,zai,agy,alibaba,opencode-go` | Scope providers                                                    |
-| `--json`                                                                       | Emit normalized JSON instead of TOON for quota, auth, or models    |
-| `--full`                                                                       | Include audit and derivation details                               |
-| `--tui`                                                                        | Render the live human terminal report instead of TOON (quota only) |
-| `--refresh 30s\|5m\|1h`                                                        | Live `--tui` refresh interval, default 5m (30s-24h)                |
-| `--once`                                                                       | Render one `--tui` frame and exit instead of staying live          |
-| `--allow-keychain-prompt`                                                      | Permit macOS provider Keychain access that could prompt            |
-| `--no-credential-refresh`                                                      | Never run a vendor CLI's own non-interactive credential refresh    |
-| `--intelligence high\|medium\|low`                                             | Filter `models` by editorial intelligence bucket                   |
-| `--sort runway`                                                                | Explicitly sort `models` by documented usable-runway evidence      |
-| `-h`, `--help`                                                                 | Print terse [AXI](https://axi.md) help                             |
-| `-v`, `-V`, `--version`                                                        | Print version                                                      |
+| Flag                                                                                | Description                                                        |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `--provider claude,codex,cursor,copilot,grok,kimi,zai,agy,alibaba,opencode-go,muse` | Scope providers                                                    |
+| `--json`                                                                            | Emit normalized JSON instead of TOON for quota, auth, or models    |
+| `--full`                                                                            | Include audit and derivation details                               |
+| `--tui`                                                                             | Render the live human terminal report instead of TOON (quota only) |
+| `--refresh 30s\|5m\|1h`                                                             | Live `--tui` refresh interval, default 5m (30s-24h)                |
+| `--once`                                                                            | Render one `--tui` frame and exit instead of staying live          |
+| `--allow-keychain-prompt`                                                           | Permit macOS provider Keychain access that could prompt            |
+| `--no-credential-refresh`                                                           | Never run a vendor CLI's own non-interactive credential refresh    |
+| `--intelligence high\|medium\|low`                                                  | Filter `models` by editorial intelligence bucket                   |
+| `--sort runway`                                                                     | Explicitly sort `models` by documented usable-runway evidence      |
+| `-h`, `--help`                                                                      | Print terse [AXI](https://axi.md) help                             |
+| `-v`, `-V`, `--version`                                                             | Print version                                                      |
 
 ### Human terminal report (`--tui`)
 
@@ -456,6 +457,8 @@ Z.AI's `five_hour` and `weekly` token windows jointly bound model usage and are 
 
 Alibaba's account `weekly` window is reported at `all_models` scope, while each `model:*` limit is kept only at its named model scope; a model limit never becomes an account-wide bound. OpenCode Go's rolling, weekly, and monthly windows are reported as raw windows but remain `unknown` for effective availability because quota-axi has no provider evidence that those windows jointly bind `all_models`.
 
+Muse Code's `five_hour` and `weekly` subscription windows jointly bound every model and are reported as one `all_models` scope, so effective remaining is the minimum across the named windows. An unfamiliar Muse Code window is not folded into that bound: it stays named in `unresolvedWindowIds` and turns the provider's semantics `partial` while the recognized-window bound remains non-definitive.
+
 For every stale provider report, raw windows remain available for diagnostics but effective availability is always `unknown` and omits `effectivePercentRemaining` and `limitingWindowIds`. Window pace is `unknown` with reason `stale`, and each effective pace summary, effective `runway`, and `selection` is also `unknown` with its unmeasurable bounds named. Routing agents must not treat a stale raw percentage as current headroom.
 
 ### Pace signals
@@ -587,10 +590,11 @@ Source attempts can include `credentialPresent` when a source is not genuinely a
 | Antigravity (`agy`)    | On macOS and Linux, can report `gemini_5h`, `gemini_weekly`, `claude_gpt_5h`, and `claude_gpt_weekly` from an already-running Antigravity app or `agy` loopback quota summary. If only model config quota is exposed, quota-axi reports model-scoped `model:<slug>` windows instead of inventing grouped windows. Antigravity v1 snapshots do not expose enough history for honest burn-rate pace, so pace stays `unknown`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Alibaba                | Reads the local `bl` CLI's Alibaba Coding Plan Token Plan usage; reports the plan name and weekly remaining percentage and reset time from the CLI's JSON output, plus any named model limits as separate `model:<name>` windows. Repeated limits for the same model remain separate with suffixed IDs such as `model:<name>:2`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | OpenCode Go            | Reads `opencode-go` (falling back to `opencode`) from OpenCode's `auth.json` and reports the provider's rolling, weekly, and monthly usage windows. It uses only cycle durations present in the payload; absent durations remain absent, and the windows' effective relationship stays unknown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Muse Code              | Reads the Muse CLI's `providers.meta` OAuth login and reports the subscription stamp's rolling `five_hour` window (`used_percent`, vendor-declared `window_duration_mins`, epoch-second `resets_at`) and `weekly` window (trusted 604,800s duration, like the other providers' weekly windows) from the vendor's own `/muse-code/key` status read. The plan label is `subs_tier_name`; the ephemeral session key, payment metadata, and upsell flags are dropped before normalization. Raw Model API keys carry no stamp and are not a credential source.                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### Model catalog and `models`
 
-`quota-axi models [--intelligence high|medium|low] [--sort runway] [--provider ...] [--json|--full]` joins a reviewed catalog of native Claude, Codex, Grok, and Kimi models to the provider's effective quota evidence. It queries those four catalog-backed providers by default and accepts only those providers in an explicit models scope. Cursor and Copilot are excluded from this first catalog because their hosted model availability is plan-dependent; Copilot's quota relationships are also currently unknown. Z.AI, Alibaba, OpenCode Go, and Antigravity report quota but have no reviewed catalog entries yet, so they are not `models` providers either.
+`quota-axi models [--intelligence high|medium|low] [--sort runway] [--provider ...] [--json|--full]` joins a reviewed catalog of native Claude, Codex, Grok, and Kimi models to the provider's effective quota evidence. It queries those four catalog-backed providers by default and accepts only those providers in an explicit models scope. Cursor and Copilot are excluded from this first catalog because their hosted model availability is plan-dependent; Copilot's quota relationships are also currently unknown. Z.AI, Alibaba, OpenCode Go, Antigravity, and Muse Code report quota but have no reviewed catalog entries yet, so they are not `models` providers either.
 
 Catalog buckets are coarse editorial classifications relative to the current frontier, not scores. They are curated from public provider material and public leaderboards, including [Artificial Analysis](https://artificialanalysis.ai/) as an informing source. quota-axi does not reproduce Artificial Analysis scores, has no runtime Artificial Analysis dependency, and never commits an Artificial Analysis key. `scripts/refresh-model-kb.ts` is a maintainer-only review aid: it may use a private `AA_API_KEY` to suggest changes, but it never writes the catalog.
 
@@ -629,6 +633,7 @@ Auth source entries can include `credentialPresent` when a source is not genuine
 | Antigravity    | No credential files; discovers already-running Antigravity or `agy` processes and reads only their 127.0.0.1 read-only loopback endpoints                                                                                                                                                                                                                                                                                      |
 | Alibaba        | The local `bl` CLI (`bl usage token-plan --output json`); quota-axi never reads Alibaba credential files or exchanges refresh data                                                                                                                                                                                                                                                                                             |
 | OpenCode Go    | `$XDG_DATA_HOME/opencode/auth.json` when set, `%LOCALAPPDATA%\opencode\auth.json` on Windows, otherwise `~/.local/share/opencode/auth.json`, for a literal `opencode-go` key with `opencode` fallback                                                                                                                                                                                                                          |
+| Muse Code      | `$MUSE_AUTH_PATH` when set, otherwise `$XDG_CONFIG_HOME/muse/auth.json` when set, otherwise `~/.config/muse/auth.json`, for the `providers.meta` OAuth login (`access_token` plus the stored `api_base_url`)                                                                                                                                                                                                                   |
 
 ### Provider notes
 
@@ -722,18 +727,26 @@ Auth source entries can include `credentialPresent` when a source is not genuine
 - Percent remaining and reset times come only from vendor `remainingFraction`/`resetTime` fields. It does not invent windows, resets, or percentages.
 - Burn rate is not reported for Antigravity v1 because the local payload exposes point-in-time quota snapshots, not enough history to compute a rate honestly.
 
+**Muse Code**
+
+- It reads the Muse CLI's `auth.json` (`$MUSE_AUTH_PATH` when set, otherwise `$XDG_CONFIG_HOME/muse/auth.json` when set, otherwise `~/.config/muse/auth.json`) and accepts only the `providers.meta` OAuth login: a nonempty `access_token` string. A missing file or login is `missing`; a non-OAuth mechanism is `invalid` and its secret is never sent anywhere. Raw Model API keys (`META_API_KEY`, or the stored `api_key`) carry no subscription stamp - the vendor's key endpoint rejects them with 401 - so they are deliberately not a credential source, mirroring Codex ignoring `OPENAI_API_KEY`.
+- It sends one redirect-disabled `POST` to the stored `api_base_url`'s `/muse-code/key` (default `https://api.meta.ai`) with the access token as a `Bearer` credential, a 15 second total deadline, and a 262,144-byte decoded-body cap. That endpoint is the vendor CLI's own subscription-status read: the CLI calls it at every startup and its `/usage` surface renders the returned stamp, and the call performs no model request and spends no quota. The stored base URL is honored only when it is an `https` origin without query or fragment; anything else falls back to the default, so configuration cannot redirect the Bearer token to an arbitrary origin. quota-axi never launches `muse`.
+- The stamp's `subs_usage.window` (`used_percent`, `window_duration_mins`, `resets_at` epoch seconds) becomes the `five_hour` session window and `subs_usage.weekly` becomes the `weekly` window; the plan label is `subs_tier_name` and the account email is exposed only behind `--full`. Everything else in the response - the ephemeral session key, payment metadata, and upsell flags - is dropped during normalization and never logged, cached, or rendered. An unparseable meter is skipped rather than invented, so a stamp with no usable meters reports a fresh empty `windows` list.
+- Definitive credential absence or rejection (HTTP 401/403) retires Muse Code cache data. An auth file that exists but cannot be read is an indeterminate local failure rather than a sign-out, so it reports `state.status: error` and stays cache-eligible. Timeout, network, 408, 429, 5xx, and oversized-response failures may reuse a formerly fresh snapshot with reset-expired windows removed and five-hour or seven-day age bounds by window kind.
+- The store holds no refresh token, and no non-interactive `muse` command was established as renewing it, so Muse Code stays read-only with no delegated refresh.
+
 ### Delegated credential refresh
 
 quota-axi reports quota; it is not an auth app. It never mints a credential, never rotates one, and never performs a refresh-token exchange over HTTP. Those refresh tokens rotate on use, so a second holder performing the exchange would spend the vendor's own single-use token and sign the user out of the harness being measured.
 
 Instead, when the same stored access token is expired, carries a refresh token, **and** is definitively rejected, quota-axi may run the vendor CLI's own smallest non-interactive command that already owns rotation, then re-read the store that CLI rewrote and retry the same read-only quota request once. Rotation is always the vendor's; quota-axi only reads the result.
 
-| Provider                                                              | Vendor-owned recovery path        | Store the vendor rewrites                             |
-| --------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------- |
-| Claude                                                                | `claude doctor` delegate          | the Claude Code Keychain item, or `.credentials.json` |
-| Codex                                                                 | existing `app-server` quota probe | `$CODEX_HOME/auth.json`                               |
-| Grok                                                                  | `grok models` delegate            | `$GROK_HOME/auth.json`                                |
-| Cursor, GitHub Copilot, Kimi, Z.AI, Alibaba, OpenCode Go, Antigravity | none                              | read-only; see the per-provider notes below           |
+| Provider                                                                         | Vendor-owned recovery path        | Store the vendor rewrites                             |
+| -------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------- |
+| Claude                                                                           | `claude doctor` delegate          | the Claude Code Keychain item, or `.credentials.json` |
+| Codex                                                                            | existing `app-server` quota probe | `$CODEX_HOME/auth.json`                               |
+| Grok                                                                             | `grok models` delegate            | `$GROK_HOME/auth.json`                                |
+| Cursor, GitHub Copilot, Kimi, Z.AI, Alibaba, OpenCode Go, Antigravity, Muse Code | none                              | read-only; see the per-provider notes below           |
 
 The Claude and Grok delegated runs are bounded the same way:
 
@@ -759,7 +772,7 @@ A Claude or Grok delegated run appears in `--full` output as its own attempt (`c
 
 A `refresh_timed_out` run is never treated as a credential verdict. Claude reports that read as unmeasured (`claude_refresh_unconfirmed`), falling back to a stale cached snapshot when one applies, and keeps the cached snapshot rather than retiring it. On Windows, a resolved `.cmd` or `.bat` command shim runs through the platform command interpreter without enabling Node's shell mode, preserving the no-shell argument boundary. Quota accuracy and the no-shell safety guarantee are unchanged. Codex needs no extra spawn: its existing read-only `cli-rpc` app-server probe both refreshes `auth.json` and returns the rate limits, so an expired Codex token already reports live quota through the vendor CLI.
 
-Providers with no established non-interactive rotation command stay read-only on purpose. That is a documented limitation rather than a reason to force an unsafe path: Cursor's CLI token is long-lived and no non-interactive `cursor-agent` command was observed to rotate it, GitHub Copilot's stored OAuth token does not expire, Z.AI uses a non-expiring API key, Alibaba is accessed through the read-only `bl` usage command, OpenCode Go has no vendor-owned rotation command, Pi-owned OAuth entries (`openai-codex`, `xai`, `kimi-coding`) have no non-interactive Pi refresh command, and Antigravity exposes no credential store at all.
+Providers with no established non-interactive rotation command stay read-only on purpose. That is a documented limitation rather than a reason to force an unsafe path: Cursor's CLI token is long-lived and no non-interactive `cursor-agent` command was observed to rotate it, GitHub Copilot's stored OAuth token does not expire, Z.AI uses a non-expiring API key, Alibaba is accessed through the read-only `bl` usage command, OpenCode Go has no vendor-owned rotation command, Pi-owned OAuth entries (`openai-codex`, `xai`, `kimi-coding`) have no non-interactive Pi refresh command, Antigravity exposes no credential store at all, and the Muse Code store holds no refresh token with no non-interactive `muse` command established as renewing it.
 
 ### Safety guarantees
 
@@ -769,7 +782,7 @@ Providers with no established non-interactive rotation command stay read-only on
 - It never prints, logs, or caches credential values.
 - It never mints, rotates, or writes a credential, and never performs a refresh-token exchange. Credential renewal is always delegated to the vendor CLI that owns the store (see [Delegated credential refresh](#delegated-credential-refresh)).
 - It never retains, prints, logs, renders, caches, sends, or exchanges a refresh token's value. The Pi credential brokers read a stored refresh value only to derive a usability boolean - whether it is a usable literal secret rather than absent or an environment, template, or command reference - and discard it immediately; elsewhere only its presence is checked, as evidence that the vendor can still recover.
-- It never launches the Cursor, Pi, Kimi, or OpenCode CLIs. It runs the read-only Alibaba `bl` usage command, the declared read-only Codex app-server probe, and the two declared refresh delegates (`claude doctor`, `grok models`); none starts a session or spends the quota being measured. Antigravity/`agy` is never launched.
+- It never launches the Cursor, Pi, Kimi, Muse, or OpenCode CLIs. It runs the read-only Alibaba `bl` usage command, the declared read-only Codex app-server probe, and the two declared refresh delegates (`claude doctor`, `grok models`); none starts a session or spends the quota being measured. Antigravity/`agy` is never launched.
 - It never signals or kills a delegated refresh. A vendor that outruns quota-axi's wait is left to finish its own token exchange, and quota-axi reports an unconfirmed refresh instead of a credential verdict.
 - It never routes, ranks a winner, or orders providers preferentially. Derived comparative signals, including `effectiveAvailability[].selection`, are published as data for the consumer to act on.
 
