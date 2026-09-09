@@ -651,7 +651,8 @@ describe("quota semantics", () => {
       unresolvedWindowIds: ["five_hour"],
     });
     expect(
-      result.quotaSemantics?.effectiveAvailability[0]?.effectivePercentRemaining,
+      result.quotaSemantics?.effectiveAvailability[0]
+        ?.effectivePercentRemaining,
     ).toBeUndefined();
   });
 
