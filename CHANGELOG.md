@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.42](https://github.com/famlopezmuralles/quota-axi/compare/quota-axi-v0.1.41...quota-axi-v0.1.42) (2026-09-09)
+
+
+### Features
+
+* **muse:** add Muse Code subscription quota provider ([011ce57](https://github.com/famlopezmuralles/quota-axi/commit/011ce571a23107fc63588011e13605980d0c3ef8))
+* **muse:** add Muse Code subscription quota provider ([2ab4266](https://github.com/famlopezmuralles/quota-axi/commit/2ab42660ab4486a60e35d66e9db9857df619db4c))
+
 ## [0.1.41](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.40...quota-axi-v0.1.41) (2026-09-08)
 
 
