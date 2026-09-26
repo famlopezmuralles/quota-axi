@@ -821,9 +821,27 @@ describe("quota semantics", () => {
       GENERATED_AT,
     );
     expect(agy.quotaSemantics).toMatchObject({
-      status: "unknown",
+      status: "partial",
       effectiveAvailability: [],
       unresolvedWindowIds: ["gemini_5h", "gemini_weekly"],
+    });
+
+    const agyNoUsage = withQuotaSemantics(
+      provider("agy", [
+        {
+          ...window("gemini_5h", "session", 100, {
+            resetsAt: offsetFromGeneratedAt(3_600),
+          }),
+          percentUsed: undefined,
+          percentRemaining: undefined,
+        },
+      ]),
+      GENERATED_AT,
+    );
+    expect(agyNoUsage.quotaSemantics).toMatchObject({
+      status: "partial",
+      effectiveAvailability: [],
+      unresolvedWindowIds: ["gemini_5h"],
     });
 
     const kimi = withQuotaSemantics(
@@ -844,6 +862,96 @@ describe("quota semantics", () => {
       ],
       unresolvedWindowIds: ["limit:2"],
     });
+  });
+
+  it("maps Antigravity families to measurable scopes without inventing pace", () => {
+    const result = withQuotaSemantics(
+      provider("agy", [
+        window("gemini_5h", "session", 92, {
+          resetsAt: offsetFromGeneratedAt(3_600),
+        }),
+        window("gemini_weekly", "weekly", 99, {
+          resetsAt: offsetFromGeneratedAt(86_400),
+        }),
+        window("claude_gpt_5h", "session", 100, {
+          resetsAt: offsetFromGeneratedAt(3_600),
+        }),
+        window("claude_gpt_weekly", "weekly", 100, {
+          resetsAt: offsetFromGeneratedAt(86_400),
+        }),
+      ]),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics?.status).toBe("known");
+    expect(result.quotaSemantics?.unresolvedWindowIds).toBeUndefined();
+    expect(result.quotaSemantics?.effectiveAvailability).toMatchObject([
+      {
+        scope: "gemini",
+        status: "known",
+        effectivePercentRemaining: 92,
+        boundedBy: ["gemini_5h", "gemini_weekly"],
+        limitingWindowIds: ["gemini_5h"],
+        runway: {
+          status: "unknown",
+          unmeasurableWindowIds: ["gemini_5h", "gemini_weekly"],
+        },
+        selection: {
+          status: "unknown",
+          unmeasurableWindowIds: ["gemini_5h", "gemini_weekly"],
+        },
+      },
+      {
+        scope: "claude_gpt",
+        status: "known",
+        effectivePercentRemaining: 100,
+        boundedBy: ["claude_gpt_5h", "claude_gpt_weekly"],
+        limitingWindowIds: ["claude_gpt_5h", "claude_gpt_weekly"],
+        runway: { status: "unknown" },
+        selection: { status: "unknown" },
+      },
+    ]);
+  });
+
+  it("scopes Antigravity model windows per model and leaves strangers unresolved", () => {
+    const result = withQuotaSemantics(
+      provider("agy", [
+        window("gemini_weekly", "weekly", 98, {
+          resetsAt: offsetFromGeneratedAt(86_400),
+        }),
+        {
+          id: "model:flash",
+          label: "Flash",
+          kind: "model",
+          percentUsed: 50,
+          percentRemaining: 50,
+          resetsAt: offsetFromGeneratedAt(3_600),
+        },
+        window("future_bucket", "unknown", 10, {
+          resetsAt: offsetFromGeneratedAt(3_600),
+        }),
+      ]),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics?.status).toBe("partial");
+    expect(result.quotaSemantics?.effectiveAvailability).toMatchObject([
+      {
+        scope: "gemini",
+        status: "known",
+        effectivePercentRemaining: 98,
+        boundedBy: ["gemini_weekly"],
+      },
+      {
+        scope: "model:flash",
+        status: "known",
+        effectivePercentRemaining: 50,
+        boundedBy: ["model:flash"],
+      },
+    ]);
+    expect(result.quotaSemantics?.unresolvedWindowIds).toEqual([
+      "future_bucket",
+    ]);
   });
 
   it("bounds Cursor by its lowest recognized window across all models", () => {

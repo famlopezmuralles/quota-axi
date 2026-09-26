@@ -119,11 +119,12 @@ function semanticsFor(
     case "cursor":
       return cursorSemantics(provider.windows, generatedAt);
     case "copilot":
-    case "agy":
       return unknownSemantics(
         provider.windows,
         `quota-axi does not know whether ${provider.label ?? provider.provider}'s reported windows are independent or jointly bounding, so it does not claim an effective remaining percentage.`,
       );
+    case "agy":
+      return agySemantics(provider.windows, generatedAt);
     case "alibaba":
       return alibabaSemantics(provider.windows, generatedAt);
     case "muse":
@@ -353,6 +354,67 @@ function kimiSemantics(
     effectiveAvailability,
     "Kimi's weekly and five-hour account windows jointly bound every model, so effective remaining is the minimum across the named windows.",
   );
+}
+
+const AGY_GEMINI_WINDOW_IDS = ["gemini_5h", "gemini_weekly"];
+const AGY_CLAUDE_GPT_WINDOW_IDS = ["claude_gpt_5h", "claude_gpt_weekly"];
+
+/**
+ * Antigravity loopback snapshots expose no cycle history (no startsAt or
+ * windowSeconds), so pace, runway, and selection stay unknown. The reported
+ * percent-remaining per product family is still a real headroom reading, so a
+ * window with known percentRemaining and resetsAt bounds its family scope at
+ * the minimum across the family's named windows - the conservative reading,
+ * which never overstates headroom. Model windows bind only their named model.
+ * Anything else stays unresolved rather than being folded into a bound.
+ */
+function agySemantics(
+  windows: QuotaWindow[],
+  generatedAt: string,
+): QuotaSemantics {
+  const gemini = windows.filter(
+    (window) =>
+      AGY_GEMINI_WINDOW_IDS.includes(window.id) && isAgyMeasurable(window),
+  );
+  const claudeGpt = windows.filter(
+    (window) =>
+      AGY_CLAUDE_GPT_WINDOW_IDS.includes(window.id) && isAgyMeasurable(window),
+  );
+  const models = windows.filter(
+    (window) =>
+      window.kind === "model" &&
+      window.id.startsWith("model:") &&
+      isAgyMeasurable(window),
+  );
+  const recognized = new Set([...gemini, ...claudeGpt, ...models]);
+  const unresolved = windows.filter((window) => !recognized.has(window));
+  const description =
+    "Antigravity's Gemini and Claude/GPT windows each bound their product family, so a family's effective remaining is the minimum across its named windows; a model window binds only its named model. The families' joint relationship is unknown, and without cycle history pace, runway, and selection stay unknown.";
+  const effectiveAvailability: EffectiveAvailability[] = [];
+  if (gemini.length > 0) {
+    effectiveAvailability.push(availability("gemini", gemini, generatedAt));
+  }
+  if (claudeGpt.length > 0) {
+    effectiveAvailability.push(
+      availability("claude_gpt", claudeGpt, generatedAt),
+    );
+  }
+  for (const model of models) {
+    effectiveAvailability.push(availability(model.id, [model], generatedAt));
+  }
+  if (unresolved.length > 0) {
+    return {
+      status: "partial",
+      description,
+      effectiveAvailability,
+      unresolvedWindowIds: unresolved.map(({ id }) => id),
+    };
+  }
+  return knownSemantics(effectiveAvailability, description);
+}
+
+function isAgyMeasurable(window: QuotaWindow): boolean {
+  return window.percentRemaining !== undefined && window.resetsAt !== undefined;
 }
 
 /**
